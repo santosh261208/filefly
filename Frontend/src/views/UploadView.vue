@@ -7,6 +7,10 @@
       <button :disabled="!selectedFile || isUploading" @click="uploadFile" class="btn btn-primary">
         {{ isUploading ? 'Fliegt...' : 'Datei hochladen' }}
       </button>
+      <div v-if="isUploading" class="progress-wrapper">
+        <div class="progress-bar" :style="{ width: uploadProgress + '%' }"></div>
+        <span class="progress-label">{{ uploadProgress }}%</span>
+      </div>
     </div>
 
     <div v-else class="result-box">
@@ -29,34 +33,47 @@ import { ref } from 'vue'
 
 const selectedFile = ref(null)
 const isUploading = ref(false)
+const uploadProgress = ref(0)
 const generatedLink = ref('')
 
 const handleFileChange = (event) => {
   selectedFile.value = event.target.files[0]
 }
 
-const uploadFile = async () => {
+const uploadFile = () => {
   if (!selectedFile.value) return
 
   isUploading.value = true
+  uploadProgress.value = 0
+
   const formData = new FormData()
   formData.append('file', selectedFile.value)
 
-  try {
-    const response = await fetch('http://localhost:8080/api/files/upload', {
-      method: 'POST',
-      body: formData
-    })
+  const xhr = new XMLHttpRequest()
 
-    if (!response.ok) throw new Error('Upload fehlgeschlagen')
+  xhr.upload.addEventListener('progress', (event) => {
+    if (event.lengthComputable) {
+      uploadProgress.value = Math.round((event.loaded / event.total) * 100)
+    }
+  })
 
-    const data = await response.json()
-    generatedLink.value = `http://localhost:5173/view/${data.shareId}`
-  } catch (error) {
-    alert(error.message)
-  } finally {
+  xhr.addEventListener('load', () => {
     isUploading.value = false
-  }
+    if (xhr.status >= 200 && xhr.status < 300) {
+      const data = JSON.parse(xhr.responseText)
+      generatedLink.value = `http://localhost:5173/view/${data.shareId}`
+    } else {
+      alert('Upload fehlgeschlagen')
+    }
+  })
+
+  xhr.addEventListener('error', () => {
+    isUploading.value = false
+    alert('Upload fehlgeschlagen')
+  })
+
+  xhr.open('POST', 'http://localhost:8080/api/files/upload')
+  xhr.send(formData)
 }
 
 const copyToClipboard = () => {
@@ -98,9 +115,6 @@ const reset = () => {
   gap: 1rem;
 }
 
-.upload-box input[type="file"] {
-  width: 100%;
-}
 
 .result-box {
   width: 100%;
@@ -132,6 +146,11 @@ const reset = () => {
   gap: 0.5rem;
 }
 
+@media (max-width: 768px) {
+  .upload-box input[type="file"] {
+    width: 100%;
+  }
+}
 @media (min-width: 480px) {
   .button-group {
     flex-direction: row;
@@ -170,5 +189,32 @@ const reset = () => {
 
 .btn-ghost:hover {
   background: #f5f5f5;
+}
+
+.progress-wrapper {
+  position: relative;
+  width: 100%;
+  height: 20px;
+  background: #e0e0e0;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  background: #1890ff;
+  border-radius: 10px;
+  transition: width 0.2s ease;
+}
+
+.progress-label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #333;
 }
 </style>
