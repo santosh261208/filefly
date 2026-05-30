@@ -1,14 +1,14 @@
 <script setup>
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
 
 const route = useRoute()
+const notFound = ref(false)
 
 const backendImageUrl = computed(() => {
   return `http://localhost:8080/api/files/download/${route.params.id}`
 })
 
-// Download via Blob, damit der Browser nicht einfach einen neuen Tab öffnet
 const forceDownload = async () => {
   try {
     const response = await fetch(backendImageUrl.value)
@@ -34,18 +34,31 @@ const forceDownload = async () => {
 
 <template>
   <div class="page">
-    <h2 class="subtitle">Bild: {{ route.params.id }}</h2>
+    <template v-if="notFound">
+      <div class="error-box">
+        <span class="error-icon">&#128247;</span>
+        <h2>Link nicht gefunden</h2>
+        <p>Die Datei existiert nicht oder wurde bereits gelöscht.</p>
+        <button @click="$router.push('/')" class="btn btn-primary">
+          Zurück zur Startseite
+        </button>
+      </div>
+    </template>
 
-    <img :src="backendImageUrl" class="preview-image" />
+    <template v-else>
+      <h2 class="subtitle">Bild: {{ route.params.id }}</h2>
 
-    <div class="button-group">
-      <button @click="$router.push('/')" class="btn btn-secondary">
-        Neues Bild hochladen
-      </button>
-      <button @click="forceDownload" class="btn btn-primary">
-        Herunterladen
-      </button>
-    </div>
+      <img :src="backendImageUrl" class="preview-image" @error="notFound = true" />
+
+      <div class="button-group">
+        <button @click="$router.push('/')" class="btn btn-secondary">
+          Neues Bild hochladen
+        </button>
+        <button @click="forceDownload" class="btn btn-primary">
+          Herunterladen
+        </button>
+      </div>
+    </template>
   </div>
 </template>
 
@@ -74,6 +87,29 @@ const forceDownload = async () => {
   object-fit: contain;
   border-radius: 8px;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.error-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  text-align: center;
+  max-width: 360px;
+}
+
+.error-icon {
+  font-size: 3rem;
+}
+
+.error-box h2 {
+  font-size: 1.4rem;
+  font-weight: 700;
+}
+
+.error-box p {
+  color: #666;
+  font-size: 0.95rem;
 }
 
 .button-group {
