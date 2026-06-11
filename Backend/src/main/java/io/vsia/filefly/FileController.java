@@ -14,11 +14,12 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Map;
 
 @Slf4j
 @RestController
 @RequestMapping("/api/files")
-@CrossOrigin(origins = "*") // Wichtig für die Verbindung zum Vue-Frontend!
+@CrossOrigin(origins = "*")
 public class FileController {
 
     private final FileRepository repository;
@@ -27,8 +28,6 @@ public class FileController {
     public FileController(FileRepository repository, @Value("${storage.location}") String storageLocation) {
         this.repository = repository;
         this.root = Paths.get(storageLocation);
-
-        // Ordner beim Start erstellen, falls er nicht existiert
         try {
             Files.createDirectories(root);
         } catch (IOException e) {
@@ -37,43 +36,63 @@ public class FileController {
     }
 
     @PostMapping("/upload")
-    public ResponseEntity<?> uploadFile(@RequestParam("file") MultipartFile file) {
+    public ResponseEntity<?> uploadFile(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "password", required = false) String password) { // NEU: Passwort Parameter
         try {
             String generatedShareId = java.util.UUID.randomUUID().toString();
-            FileMetadata metadata = repository.save(new FileMetadata(
+            FileMetadata metadata = new FileMetadata(
                     file.getOriginalFilename(),
                     file.getContentType(),
                     generatedShareId
-            ));
-
-            Files.copy(file.getInputStream(), this.root.resolve("file_" + metadata.getShareId()));
-
-            java.util.Map<String, Object> response = java.util.Map.of(
-                    "fileName", metadata.getOriginalFileName(),
-                    "downloadUrl", "http://localhost:8080/api/files/download/" + metadata.getShareId(),
-                    "shareId", generatedShareId
             );
 
-            return ResponseEntity.ok(response);
+            // NEU: Passwort setzen, falls eines mitgegeben wurde
+            if (password != null && !password.isEmpty()) {
+                metadata.setPassword(password);
+            }
+
+            repository.save(metadata);
+            Files.copy(file.getInputStream(), this.root.resolve("file_" + metadata.getShareId()));
+
+            return ResponseEntity.ok(java.util.Map.of(
+                    "fileName", metadata.getOriginalFileName(),
+                    "shareId", generatedShareId
+            ));
         } catch (Exception e) {
             log.error(e.getMessage());
             return ResponseEntity.status(500).body(java.util.Map.of("error", "Fehler beim Upload: " + e.getMessage()));
         }
     }
 
-    @GetMapping("/download/{shareId}")
-    public ResponseEntity<?> downloadFile(@PathVariable String shareId) {
+    @GetMapping("/info/{shareId}")
+    public ResponseEntity<?> getFileInfo(@PathVariable String shareId) {
+        return repository.findByShareId(shareId)
+                .map(metadata -> {
+                    boolean requiresPassword = metadata.getPassword() != null && !metadata.getPassword().isEmpty();
+                    return ResponseEntity.ok(java.util.Map.of("requiresPassword", requiresPassword));
+                })
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    @PostMapping("/download/{shareId}")
+    public ResponseEntity<?> downloadFile(@PathVariable String shareId, @RequestBody(required = false) java.util.Map<String, String> body) {
         try {
             FileMetadata metadata = repository.findByShareId(shareId)
                     .orElseThrow(() -> new RuntimeException("Datei nicht gefunden"));
 
+            if (metadata.getPassword() != null && !metadata.getPassword().isEmpty()) {
+                String providedPassword = (body != null) ? body.get("password") : null;
+                if (!metadata.getPassword().equals(providedPassword)) {
+                    return ResponseEntity.status(401).body(java.util.Map.of("error", "Falsches Passwort"));
+                }
+            }
+
             Path file = root.resolve("file_" + metadata.getShareId());
-            org.springframework.core.io.Resource resource = new UrlResource(file.toUri());
+            Resource resource = new UrlResource(file.toUri());
 
             String contentType = metadata.getContentType();
-            if (contentType == null) {
-                contentType = "application/octet-stream";
-            }
+            if (contentType == null) contentType = "application/octet-stream";
 
             return ResponseEntity.ok()
                     .contentType(MediaType.parseMediaType(contentType))

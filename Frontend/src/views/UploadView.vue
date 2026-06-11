@@ -4,9 +4,18 @@
 
     <div v-if="!generatedLink" class="upload-box">
       <input type="file" @change="handleFileChange" />
+
+      <input type="password" v-model="password" placeholder="Passwort (optional)" class="input-field" />
+      <select v-model="expireHours" class="input-field">
+        <option value="1">Ablauf in 1 Stunde</option>
+        <option value="24">Ablauf in 24 Stunden</option>
+        <option value="168">Ablauf in 7 Tagen</option>
+      </select>
+
       <button :disabled="!selectedFile || isUploading" @click="uploadFile" class="btn btn-primary">
         {{ isUploading ? 'Fliegt...' : 'Datei hochladen' }}
       </button>
+
       <div v-if="isUploading" class="progress-wrapper">
         <div class="progress-bar" :style="{ width: uploadProgress + '%' }"></div>
         <span class="progress-label">{{ uploadProgress }}%</span>
@@ -32,6 +41,8 @@
 import { ref } from 'vue'
 
 const selectedFile = ref(null)
+const password = ref('')
+const expireHours = ref('24') // Standard auf 24h
 const isUploading = ref(false)
 const uploadProgress = ref(0)
 const generatedLink = ref('')
@@ -49,6 +60,13 @@ const uploadFile = () => {
   const formData = new FormData()
   formData.append('file', selectedFile.value)
 
+  // NEU: Security-Daten mitsenden
+  if (password.value) {
+    formData.append('password', password.value)
+  }
+  formData.append('expireHours', expireHours.value)
+
+  // WIEDER DA: XMLHttpRequest für euren Fortschrittsbalken
   const xhr = new XMLHttpRequest()
 
   xhr.upload.addEventListener('progress', (event) => {
@@ -83,11 +101,15 @@ const copyToClipboard = () => {
 
 const reset = () => {
   selectedFile.value = null
+  password.value = ''
+  expireHours.value = '24'
   generatedLink.value = ''
+  uploadProgress.value = 0
 }
 </script>
 
 <style scoped>
+/* Euer komplettes Original-CSS bleibt erhalten */
 .page {
   min-height: 100vh;
   display: flex;
@@ -115,6 +137,13 @@ const reset = () => {
   gap: 1rem;
 }
 
+.input-field {
+  width: 100%;
+  padding: 0.6rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 0.95rem;
+}
 
 .result-box {
   width: 100%;

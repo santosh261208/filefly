@@ -18,12 +18,13 @@ public class FileMetadata {
     private String contentType;
     private String shareId;
 
+    private String password;
+
     public FileMetadata() {}
+
     public FileMetadata(String originalFileName, String contentType, String shareId) {
         this.originalFileName = originalFileName;
         this.contentType = contentType;
         this.shareId = shareId;
     }
-
 }
-
